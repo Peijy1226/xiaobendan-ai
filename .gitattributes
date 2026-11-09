@@ -1,0 +1,16 @@
+* text=auto
+
+# 二进制：不要做换行转换，否则文件会损坏
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.mp4 binary
+*.onnx binary
+*.exe binary
+*.zip binary
+
+# 源码统一 LF，方便别人在 Mac/Linux 上读
+*.py text eol=lf
+*.md text eol=lf
+*.iss text eol=crlf
