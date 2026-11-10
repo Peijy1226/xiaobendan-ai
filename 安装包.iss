@@ -6,7 +6,7 @@
 ; ============================================================
 
 #define MyAppName "小笨蛋"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.1"
 #define MyAppPublisher "Pei"
 #define MyAppExeName "小笨蛋.exe"
 

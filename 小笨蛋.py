@@ -82,8 +82,28 @@ if sys.stdout is None or sys.stderr is None:
 DIR = (os.path.dirname(os.path.abspath(sys.executable))
        if getattr(sys, "frozen", False)
        else os.path.dirname(os.path.abspath(__file__)))
-quanbu = sorted(n for n in os.listdir(DIR)
-                if n.startswith("素材") and n.endswith(".txt"))
+# 素材统一放在「素材/」里。老版本是把 素材*.txt 散在程序根目录的，
+# 升级过来的用户不会自动搬家，所以两处都扫，子目录优先、同名去重。
+SUCAI_MU = os.path.join(DIR, "素材")
+
+
+def su_cai_lu(ming):
+    """素材文件的实际路径：先找 素材/，找不到退回根目录（兼容老版本）"""
+    for mu in (SUCAI_MU, DIR):
+        lu = os.path.join(mu, ming)
+        if os.path.exists(lu):
+            return lu
+    return os.path.join(SUCAI_MU, ming)
+
+
+quanbu = []
+for _mu in (SUCAI_MU, DIR):
+    try:
+        for _n in sorted(os.listdir(_mu)):
+            if _n.startswith("素材") and _n.endswith(".txt") and _n not in quanbu:
+                quanbu.append(_n)
+    except Exception:
+        pass
 
 # ── 表情包 ──────────────────────────────────────────────────────────
 # 两个池子：
@@ -713,8 +733,8 @@ wenjian = _xuan_zhu_sucai(LIAOTIAN_SUCAI) if LIAOTIAN_SUCAI else []
 # 【新增·健壮性】第 1 步在这里直接 raise SystemExit，双击运行会黑屏闪退。
 # 现在改成：没素材也能启动，只是大模型没读过书，报时和算数照样能用。
 if not wenjian:
-    print("【提示】本文件夹里没找到聊天用的素材*.txt，大模型暂时没读过书。")
-    print("        把素材文件放到这里就能聊天了：%s" % DIR)
+    print("【提示】没找到聊天用的 素材*.txt，大模型暂时没读过书。")
+    print("        把素材文件放到这里就能聊天了：%s" % SUCAI_MU)
     print("        现在能用的功能：报时、算数、讲笑话。")
     print()
 
@@ -730,7 +750,7 @@ def _shi_shuoming(hang):
 
 duanluo = []
 for name in wenjian:
-    with open(os.path.join(DIR, name), encoding="utf-8") as f:
+    with open(su_cai_lu(name), encoding="utf-8") as f:
         zhengwen = "\n".join(h for h in f.read().splitlines() if not _shi_shuoming(h))
     duanluo.append(zhengwen)
 TEXT = "".join(duanluo).replace("\r", "").replace("\n", "").replace(" ", "")
@@ -834,7 +854,7 @@ def _shou_juzi(wenben, lai):
 
 for _name in LIAOTIAN_SUCAI:            # 四份聊天素材全收（原来是只收一份）
     try:
-        with open(os.path.join(DIR, _name), encoding="utf-8") as _f:
+        with open(su_cai_lu(_name), encoding="utf-8") as _f:
             _shou_juzi(_f.read(), _name)
     except Exception:
         pass
@@ -1252,7 +1272,7 @@ XIAOHUA_WENJIAN = [n for n in quanbu if "笑话" in n]     # 文件名里带“�
 XIAOHUA = []                                             # [(问那一句, 答那一句), ……]
 
 for _name in XIAOHUA_WENJIAN:
-    with open(os.path.join(DIR, _name), encoding="utf-8") as _f:
+    with open(su_cai_lu(_name), encoding="utf-8") as _f:
         for _line in _f:
             _line = _line.strip()
             if not _line or "答：" not in _line:
@@ -1310,7 +1330,7 @@ def _du_biaoge(wenjian_ci):
     for _n in quanbu:
         if wenjian_ci not in _n:
             continue
-        with open(os.path.join(DIR, _n), encoding="utf-8") as _f:
+        with open(su_cai_lu(_n), encoding="utf-8") as _f:
             for _l in _f:
                 _l = _l.strip()
                 if not _l or _l.startswith("#"):
@@ -5283,7 +5303,23 @@ KUAJIANG_CI = ("谢谢", "厉害", "好听", "好笑", "喜欢", "真棒", "不�
 # 注意：“无聊”“难看”不放进来 —— “我无聊”“这电影难看”都是用户在说自己的事，
 # 不是骂我，误判会让好端端一句话把我说委屈了（第一版就踩过）。
 ZEMA_CI = ("你真笨", "你笨", "你蠢", "你真蠢", "垃圾", "废物", "讨厌你", "你真讨厌",
-           "差劲", "闭嘴", "滚开", "你没用", "你真傻")
+           "差劲", "闭嘴", "滚开", "你没用", "你真傻",
+           # 补：日常会让她"不高兴"的说法。都带明确指向（"你"或语气词），
+           # 不放"生气""烦"这种单字 —— "我今天很生气"是在说自己的事。
+           "你好烦", "别烦我", "烦死了你", "我生气了", "生你气了", "不想理你",
+           "你走开", "讨厌死了")
+
+# 「开心类」表情：贴出这几张的时候，好感度 +1
+BQ_KAIXIN = ("开心", "兴奋", "偷笑", "比心", "招手")
+
+# ---------- 好感度节奏（嫌快嫌慢都改这四个数，别的地方不用动）----------
+# 设计目标：满 100 要"聊上一阵子"，不是半小时就到顶。
+# 按下面这组数，正常聊一天（30 轮左右）大概涨 5~8 点，一周左右到满。
+HAOGAN_MEI_LUN = 6      # 每聊这么多轮，涨 1 点（0 = 聊天完全不涨）
+HAOGAN_JIA_LUN = 1      # 上面那次涨几点
+HAOGAN_KUA = 1          # 被夸一次涨几点（原来是 6，太快）
+HAOGAN_BIAOQING = 1     # 贴一张开心类表情涨几点
+HAOGAN_MA = -1          # 说伤人的话掉几点（原来是 -10）
 
 
 
@@ -5395,17 +5431,29 @@ class Qingxu:
         return "平静"                         # 其余都是闲聊
 
     def gengxin(self, text, huifu):
-        """每答完一句调用一次：决定这次用哪种脸色，并更新好感度"""
-        self.lunshu += 1
-        self._jia_haogan(1)                   # 第 ③ 条：陪着聊就慢慢变熟
+        """每答完一句调用一次：决定这次用哪种脸色，并更新好感度
 
-        if self._you(text, ZEMA_CI):          # 第 ② 条：被骂了
-            self._jia_haogan(-10)
+        【好感度改版】原来每聊一句就 +1，二三十句就满了，"好感"变得不值钱。
+        现在改成三条：
+          · 平时聊天不涨（原来那句无条件的 +1 已去掉）；
+          · 贴出一张"开心类"表情时 +1（在 _ke_biaoqing 里加，见 BQ_KAIXIN）；
+          · 说了让她委屈的话 -1。
+        想调回原来的手感，把下面的数字改回去就好。
+        """
+        self.lunshu += 1
+
+        # 陪伴分：每 HAOGAN_MEI_LUN 轮才涨 1 点。
+        # 原来是无条件每轮 +1，聊 45 句就满 100，好感度等于没有。
+        if HAOGAN_MEI_LUN > 0 and self.lunshu % HAOGAN_MEI_LUN == 0:
+            self._jia_haogan(HAOGAN_JIA_LUN)
+
+        if self._you(text, ZEMA_CI):          # 第 ② 条：被骂了 / 惹她不高兴
+            self._jia_haogan(HAOGAN_MA)
             self.dangqian = "委屈"
             return self.dangqian
 
         if self._you(text, KUAJIANG_CI):      # 第 ② 条：被夸了
-            self._jia_haogan(6)
+            self._jia_haogan(HAOGAN_KUA)
             self.dangqian = "兴奋" if self.haogan >= 75 else "开心"
             return self.dangqian
 
@@ -9776,10 +9824,13 @@ GONGNENG_LIE = (
     # ⑤【第二轮】原「背景」改叫「壁纸」（内部 key 仍是 beijing，所有调用不用动）
     ("壁纸",     "beijing"),
     ("字体大小", "ziti"),
-    # ⑦ 清空聊天记录：名字取四个字，和「字体大小」同宽 —— 按钮是 118 固定宽，
+    ("记忆",     "jiyi"),
+    # ⑦ 忘记我吧：名字取四个字，和「字体大小」同宽 —— 按钮是 118 固定宽，
     #    五个字（如「清空聊天记录」）量出来 78px，加上图标 18 + 间隙 10 +
     #    左右内边距 28 就是 134px，会被胶囊裁掉，所以只能用四字。
-    ("清空聊天", "qingkong"),
+    #    「忘记我吧」比「清空聊天」更符合她的口气：她知道自己笨、记不住人，
+    #    点这一下等于是让她把这段关系整个忘掉。
+    ("忘记我吧", "qingkong"),
     ("帮助",     "bangzhu"),
 )
 
@@ -9983,6 +10034,15 @@ class DuihuaChuangkou:
         root.bind("<Control-KP_Subtract>", lambda e: self.gaibian_ziti(-1))
 
         self._kaichang()
+
+        # 存档：每 5 秒看一眼有没有变化，变了就写盘；关窗再兜一次
+        try:
+            self._cd_yao = None
+            self.root.after(5000, self._zidong_cundang)
+            self.root.protocol("WM_DELETE_WINDOW", self._guan_bi)
+        except Exception:
+            pass
+
         # 一切摆好之后，再统一铺一次整窗背景（这会儿各条才有真实尺寸）
         try:
             self.root.update_idletasks()
@@ -10371,6 +10431,77 @@ class DuihuaChuangkou:
                          changjing=cj)
             if lu:
                 self.duihua.tian_tu(lu)
+                # 贴的是"开心类"表情 → 好感 +1。
+                # 这是现在唯一会自然涨好感的途径：她真的高兴了才算数，
+                # 不是"聊得久"就自动变熟。
+                try:
+                    ming = os.path.basename(lu)
+                    if any(ming.startswith(k) for k in BQ_KAIXIN):
+                        zhiqian = self.qingxu.haogan
+                        self.qingxu._jia_haogan(HAOGAN_BIAOQING)
+                        if self.qingxu.haogan != zhiqian:
+                            xin = getattr(self, "xin", None)
+                            if xin is not None:
+                                xin.she(self.qingxu.haogan)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _huifu_cundang(self):
+        """恢复上次的聊天记录和好感度。没有存档、或者存档里没对话，返回 False"""
+        shu = du_cundang()
+        if not shu:
+            return False
+        # 好感度、轮数、心情先恢复 —— 这些是"关系"，不随聊天记录一起清
+        try:
+            self.qingxu.haogan = max(0, min(100, int(shu.get("好感度", 55))))
+            self.qingxu.lunshu = max(0, int(shu.get("轮数", 0)))
+            xq = str(shu.get("心情") or "平静")
+            self.qingxu.dangqian = xq if xq in QINGXU_BIAO else "平静"
+            self.xin.she(self.qingxu.haogan)
+            # 顶栏那行"好感度 72/100 · 第 18 轮"是画布文字，得手动刷一次
+            self.ding.itemconfig(self.zhuangtai_id,
+                                 text=self.qingxu.zhuangtai())
+        except Exception:
+            pass
+
+        # 对话只恢复"人话"：清空聊天后存档里可能只剩一条系统提示，那种不算聊天记录
+        tiao = shu.get("对话") or []
+        ren = [x for x in tiao if x and x[0] in ("wo", "ta", "pangbai")]
+        if not ren:
+            return False
+        try:
+            self.duihua._tiao = [list(x) for x in tiao]
+            self.duihua._zhonghua()
+        except Exception:
+            return False
+        return True
+
+    def _zidong_cundang(self):
+        """每 5 秒看一眼：对话条数 / 好感度 / 轮数有变化就落盘"""
+        try:
+            yao = (len(self.duihua._tiao), self.qingxu.haogan, self.qingxu.lunshu)
+            if yao != getattr(self, "_cd_yao", None):
+                self._cd_yao = yao
+                xie_cundang(self.duihua._tiao, self.qingxu.haogan,
+                            self.qingxu.lunshu, self.qingxu.dangqian)
+        except Exception:
+            pass
+        try:
+            self.root.after(5000, self._zidong_cundang)
+        except Exception:
+            pass
+
+    def _guan_bi(self):
+        """关窗口前再存一次，兜住最后 5 秒内说的话"""
+        try:
+            xie_cundang(self.duihua._tiao, self.qingxu.haogan,
+                        self.qingxu.lunshu, self.qingxu.dangqian)
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
         except Exception:
             pass
 
@@ -10383,6 +10514,12 @@ class DuihuaChuangkou:
         而且「好感度」在顶栏一直显示着、「☰ 功能」按钮也一直摆在顶栏，
         提示里说的东西本来就看得见。所以整段去掉，开口就是干干净净一句话。
         """
+        # 有存档就接上次的，不重头再来
+        try:
+            if self._huifu_cundang():
+                return
+        except Exception:
+            pass
         self.duihua.tian_ta(TTS_KAI_CHANG, self._biaoti())
         # 开场白后面跟一张表情，先露个脸
         self.duihua.tian_tu(bq_xuan("平静", False,
@@ -11032,6 +11169,12 @@ class DuihuaChuangkou:
                 self.qiehuan_gongneng()
             self.dakai_xiezuo()
             return
+        elif jian == "jiyi":
+            # 记忆：把我记住的东西（人设 + 这次聊的天）导成一份文件
+            if self.gongneng_kai:
+                self.qiehuan_gongneng()
+            self.dakai_jiyi()
+            return
         elif jian == "qingkong":
             # 第二轮：先收起功能条再做确认弹窗，免得弹窗被那条横条挤在下面
             if self.gongneng_kai:
@@ -11056,6 +11199,7 @@ class DuihuaChuangkou:
         self._xz_chuang = None
         self._qingkong_chuang = None
         self._zl_chuang = None
+        self._jy_chuang = None
 
     def _nei_chuang(self, kuan, gao, biaoti=""):
         """在「小笨蛋」窗口正中央开一块浮层面板，返回一个 Frame
@@ -11088,6 +11232,121 @@ class DuihuaChuangkou:
         except Exception:
             pass
         return wai
+
+    # ================= ⑫ 记忆：把人设和聊天记录倒出来 =================
+    def dakai_jiyi(self):
+        """「记忆」面板：人设 + 这次聊的天 → 一份 markdown
+
+        为什么做这个：她本质上是个很笨的程序，换个模型就等于失忆。
+        把人设和聊过的话倒出来，别的模型接手时至少知道"她是谁""我们聊过什么"。
+        这是这个程序里唯一能被带走的东西。
+        """
+        if getattr(self, "_jy_chuang", None) is not None:
+            try:
+                self._jy_chuang.lift()
+                return
+            except Exception:
+                self._jy_chuang = None
+
+        chuang = self._nei_chuang(450, 380, "记忆")
+        self._jy_chuang = chuang
+
+        tk.Label(chuang, text="🧠 记忆", bg=SE_DI, fg=SE_JIN,
+                 font=(self.ziti, 14, "bold")).pack(pady=(14, 4))
+        tk.Label(chuang,
+                 text="我很笨，记性也不好。\n"
+                      "换个模型，就等于把我认识你的这些天全忘了。\n\n"
+                      "所以「我是谁」和「我们说过的每一句」都在这儿。\n"
+                      "你想带走，随时可以。",
+                 bg=SE_DI, fg=SE_DAN, font=(self.ziti, 10),
+                 justify="center").pack(pady=(0, 12))
+
+        tiao = getattr(self.duihua, "_tiao", []) or []
+        ju = sum(1 for t in tiao if t and t[0] in ("wo", "ta"))
+        tk.Label(chuang,
+                 text="现在记着 %d 句，聊了 %d 轮，好感度 %d/100"
+                      % (ju, getattr(self.qingxu, "lunshu", 0),
+                         getattr(self.qingxu, "haogan", 55)),
+                 bg=SE_DI, fg="#c6c0b2", font=(self.ziti, 9)).pack()
+
+        zt = tk.Label(chuang, text="", bg=SE_DI, fg=SE_JIN,
+                      font=(self.ziti, 9), wraplength=400, justify="center")
+        zt.pack(pady=(10, 0))
+
+        def _dao():
+            try:
+                lu = self._xie_jiyi()
+                zt.config(text="写好了 ——\n" + lu, fg=SE_JIN)
+            except Exception as e:
+                zt.config(text="没写成：%r" % (e,), fg="#de7a70")
+
+        tk.Button(chuang, text="导出到文件", command=_dao,
+                  bg="#3a3022", fg=SE_JIN, relief="flat", bd=0,
+                  font=(self.ziti, 10, "bold"),
+                  activebackground="#50422e",
+                  activeforeground="#fff6dc",
+                  padx=20, pady=6, cursor="hand2").pack(pady=14)
+
+        tk.Label(chuang, text="存在程序目录的「记忆」文件夹里",
+                 bg=SE_DI, fg="#928d82",
+                 font=(self.ziti, 8)).pack(pady=(0, 10))
+
+    def _xie_jiyi(self):
+        """把 人设 + 聊天记录 写成一份 markdown，返回文件路径"""
+        mu = os.path.join(DIR, "记忆")
+        try:
+            os.makedirs(mu, exist_ok=True)
+        except Exception:
+            pass
+        xianzai = datetime.datetime.now()
+        lu = os.path.join(mu, "记忆_%s.md" % xianzai.strftime("%Y%m%d_%H%M"))
+
+        # ---- 人设 ----
+        try:
+            with open(os.path.join(DIR, "人设.txt"), encoding="utf-8") as f:
+                ren = f.read().strip()
+        except Exception:
+            ren = "（人设.txt 没读到）"
+
+        # ---- 聊天记录：直接读对话区的气泡表 ----
+        # tag 有 wo / ta / pangbai / xitong / tu 五种，前三种是人话，后两种跳过。
+        hang = []
+        for tiao in (getattr(self.duihua, "_tiao", []) or []):
+            if not tiao or len(tiao) < 2:
+                continue
+            tag, wen = tiao[0], str(tiao[1] or "").strip()
+            if not wen:
+                continue
+            if tag == "wo":
+                hang.append("**我**：" + wen.replace("\n", " "))
+            elif tag == "ta":
+                hang.append("**小笨蛋**：" + wen.replace("\n", " "))
+            elif tag == "pangbai":
+                hang.append("（%s）" % wen.replace("\n", " "))
+        liaotian = "\n\n".join(hang) if hang else "（还没聊过）"
+
+        nei = (
+            "# 小笨蛋 · 记忆\n\n"
+            "> 导出时间：%s　｜　好感度 %d/100　心情「%s」　聊到第 %d 轮\n"
+            ">\n"
+            "> 左边是她的人设，右边是你们说过的话。\n"
+            "> 换个模型接着聊时，把这份文件一起喂进去 —— 新模型至少知道她是谁、你们聊过什么。\n\n"
+            "---\n\n"
+            "## 一、她是谁（人设）\n\n%s\n\n"
+            "---\n\n"
+            "## 二、我们说过的\n\n%s\n\n"
+            "---\n\n"
+            "> 她记性不好，换台机器就等于失忆。\n"
+            "> 这份记忆留给你，别弄丢了。\n"
+        ) % (xianzai.strftime("%Y-%m-%d %H:%M"),
+             getattr(self.qingxu, "haogan", 55),
+             getattr(self.qingxu, "dangqian", "平静"),
+             getattr(self.qingxu, "lunshu", 0),
+             ren, liaotian)
+
+        with open(lu, "w", encoding="utf-8") as f:
+            f.write(nei)
+        return lu
 
     def dakai_xiezuo(self):
         """「写作」：选体裁 → 写题目 → 生成 100~200 字
@@ -11887,14 +12146,15 @@ class DuihuaChuangkou:
             except Exception:
                 self._qingkong_chuang = None
 
-        chuang = self._nei_chuang(380, 180, "清空聊天")
+        chuang = self._nei_chuang(400, 200, "忘记我吧")
         self._qingkong_chuang = chuang
 
-        tk.Label(chuang, text="确认清除所有聊天记录？", bg=SE_DI, fg=SE_JIN,
-                 font=(self.ziti, 13, "bold")).pack(pady=(22, 6))
+        tk.Label(chuang, text="真的要我忘掉吗？", bg=SE_DI, fg=SE_JIN,
+                 font=(self.ziti, 13, "bold")).pack(pady=(22, 8))
         tk.Label(chuang,
-                 text="对话区里的气泡和系统提示会被全部清掉。\n"
-                      "好感度、轮数、心情、壁纸、字号都不受影响。",
+                 text="说过的每一句、攒下的好感、聊过的轮数，\n"
+                      "都会一起没掉。\n\n"
+                      "下次打开，我们俩就跟刚认识一样。",
                  bg=SE_DI, fg=SE_DAN, font=(self.ziti, 10),
                  justify="center").pack(pady=(0, 16))
 
@@ -11910,10 +12170,10 @@ class DuihuaChuangkou:
             _guan()
             self.qingkong_liaotian()
 
-        WuNiu(pai, "取消", _guan, self.ziti, daxiao=11, gao=34,
+        WuNiu(pai, "再想想", _guan, self.ziti, daxiao=11, gao=34,
               kuandu=118, beijing=SE_KUANG, wenzi_se=SE_DAN).pack(
                   side="left", padx=8)
-        WuNiu(pai, "确认清空", _que, self.ziti, daxiao=11, gao=34,
+        WuNiu(pai, "忘了吧", _que, self.ziti, daxiao=11, gao=34,
               kuandu=118, beijing=SE_JIN, wenzi_se="#1a1a1a").pack(
                   side="left", padx=8)
 
@@ -11933,12 +12193,11 @@ class DuihuaChuangkou:
             pass
 
     def qingkong_liaotian(self):
-        """⑦ 「☰ 功能 → 清空聊天」：把对话区里的聊天记录全部清掉。
+        """⑦ 「☰ 功能 → 忘记我吧」：比"清空聊天"更彻底
 
-        清的范围就是"聊天记录"本身 —— 对话区里所有气泡和系统提示
-        （LiaoTianQu._tiao 这一整串）一次性清空，包括开头那三条问候。
-        好感度、轮数、心情、背景、字号一律不动：那些是状态和外观，
-        不是聊天记录，清了就变成"重启程序"了。
+        清的不只是对话 —— 好感度、轮数、心情也一起归零，存档文件直接删掉。
+        意思是"这段关系从头来过"，下次打开跟第一次见面一样。
+        背景、字号、壁纸这些外观设置不动（那不是记忆）。
 
         顺带要收的三样：
           · zai_diaoyong / _cai_dan_bofang 这类"正在调用…"的临时标记，
@@ -11948,7 +12207,25 @@ class DuihuaChuangkou:
         self.duihua.qing()
         self.zai_diaoyong = ""
         self._cai_dan_bofang = False
-        self.xie_ru_xitong("（聊天记录已清空）")
+
+        # 「忘记我吧」是真的忘干净：攒下的好感、聊过的轮数、当前心情一起归零。
+        # 不是"清空聊天记录"那种半吊子 —— 点了这一下，两个人就回到刚认识。
+        try:
+            self.qingxu.haogan = 55
+            self.qingxu.lunshu = 0
+            self.qingxu.dangqian = "平静"
+            self.qingxu.lianren = False
+            self.xin.she(self.qingxu.haogan)
+            self.ding.itemconfig(self.zhuangtai_id,
+                                 text=self.qingxu.zhuangtai())
+        except Exception:
+            pass
+
+        # 存档整个删掉：下次打开读不到，就是完完全全的第一次
+        shan_cundang()
+        self._cd_yao = None
+
+        self.xie_ru_xitong("（忘掉了。）")
 
     def _biaoti(self):
         """④ 气泡上方那行：小笨蛋 + 脸色，调用功能时再接一段「正在调用…」
@@ -14739,7 +15016,8 @@ GN_NEI_RONG = (
     ("dashang", "打赏"),
     ("beijing", "壁纸"),
     ("ziti",   "字体大小"),
-    ("qingkong", "清空聊天"),
+    ("qingkong", "忘记我吧"),
+    ("jiyi",  "记忆"),
     ("bangzhu", "帮助"),
     ("guanyu", "关于"),
 )
@@ -15013,6 +15291,7 @@ class GongNengYe:
             "dashang_dang": 2,
             "acc_mode": 0,          # 0=跟随壁纸 1=固定暖金
         }
+        self.jiyi_zt = ""          # 记忆页：上次导入/导出的结果，显示在页面上
         self._renshe_kuang = None
         self._xz_ti_kuang = None
         # 贴在画布上的真输入框（Entry / Text）登记表：元素是
@@ -16356,6 +16635,100 @@ class GongNengYe:
         d.text((x + 180, y + 11), "点两次才会真的清" if self.qing_que else "",
                font=f_f, fill=(190, 130, 110))
 
+    def _ye_jiyi(self, tu, d, f_z, f_f, f_xiao, f_ti):
+        """记忆页：把人设和聊天导成一份文件，换个模型也能接着聊"""
+        x = self.nav_kuan + 26
+        y = self.tou + 12
+        d.text((x, y), "把我记住的东西倒出来 —— 人设 + 这次聊的天",
+               font=f_f, fill=(188, 182, 168))
+        y += 36
+
+        for hang in ("我很笨，记性也不好。换个模型，就等于把我认识你的这些天全忘了。",
+                     "",
+                     "所以「我是谁」和「我们说过的每一句」都在这儿。",
+                     "你想带走，随时可以。"):
+            if hang:
+                d.text((x, y), hang, font=f_f, fill=(206, 200, 186))
+            y += 24
+        y += 16
+
+        # 实时统计：让"记着多少"这件事有实感
+        tiao = getattr(getattr(self.zhu, "duihua", None), "_tiao", []) or []
+        ju = sum(1 for t in tiao if t and t[0] in ("wo", "ta"))
+        haogan = getattr(getattr(self.zhu, "qingxu", None), "haogan", 55)
+        d.text((x, y), "现在记着 %d 句，好感度 %d/100" % (ju, haogan),
+               font=f_f, fill=self.se_liang)
+        y += 34
+
+        b1 = self._niu(tu, d, x, y, 150, 34, "导出记忆", True)
+        self.hits.append(b1 + (("act", "jiyi_dao"),))
+        b2 = self._niu(tu, d, x + 164, y, 150, 34, "导入记忆")
+        self.hits.append(b2 + (("act", "jiyi_dao_ru"),))
+        y += 54
+
+        if self.jiyi_zt:
+            d.text((x, y), self.jiyi_zt, font=f_xiao, fill=(198, 192, 178))
+        else:
+            d.text((x, y), "导出的文件存在程序目录的「记忆」文件夹里", font=f_xiao,
+                   fill=(164, 158, 146))
+
+    def _dao_ru_jiyi(self):
+        """导入记忆：选一份之前导出的 .md，把对话读回来
+
+        会替换掉当前的聊天记录，所以先问一句再动手。
+        好感度跟着文件一起恢复 —— 记忆里的关系程度也算记忆的一部分。
+        """
+        from tkinter import filedialog, messagebox
+        try:
+            lu = filedialog.askopenfilename(
+                title="选一份记忆文件",
+                initialdir=JIYI_MULU if os.path.isdir(JIYI_MULU) else DIR,
+                filetypes=[("记忆文件", "*.md"), ("所有文件", "*.*")])
+        except Exception:
+            lu = ""
+        if not lu:
+            return
+
+        try:
+            hang, haogan = du_jiyi_wenjian(lu)
+        except Exception as e:
+            self.jiyi_zt = "读不了这个文件：%r" % (e,)
+            self._hui(dan=True)
+            return
+
+        if not hang:
+            self.jiyi_zt = "这个文件里没找到聊天记录"
+            self._hui(dan=True)
+            return
+
+        try:
+            if not messagebox.askyesno(
+                    "导入记忆",
+                    "会用这份记忆里的 %d 句替换现在的聊天记录。\n确定吗？" % len(hang)):
+                return
+        except Exception:
+            pass
+
+        zhu = self.zhu
+        try:
+            zhu.duihua._tiao = [list(x) for x in hang]
+            zhu.duihua._zhonghua()
+        except Exception as e:
+            self.jiyi_zt = "写回对话区失败：%r" % (e,)
+            self._hui(dan=True)
+            return
+
+        if haogan is not None:
+            try:
+                zhu.qingxu.haogan = max(0, min(100, int(haogan)))
+                zhu.xin.she(zhu.qingxu.haogan)
+            except Exception:
+                pass
+
+        self.jiyi_zt = "已导入 %d 句%s" % (
+            len(hang), ("，好感度 %d" % haogan) if haogan is not None else "")
+        self._hui(dan=True)
+
     def _ye_bangzhu(self, tu, d, f_z, f_f, f_xiao, f_ti):
         x = self.nav_kuan + 26
         y = self.tou + 12
@@ -16767,6 +17140,20 @@ class GongNengYe:
     def _dong_zuo(self, can):
         zhu = self.zhu
         try:
+            if can == "jiyi_dao":
+                # 记忆页的「导出记忆」：人设 + 聊天记录 → 记忆/记忆_时间.md
+                lu = xie_jiyi_wenjian(
+                    getattr(getattr(zhu, "duihua", None), "_tiao", []),
+                    getattr(getattr(zhu, "qingxu", None), "haogan", 55),
+                    getattr(getattr(zhu, "qingxu", None), "dangqian", "平静"),
+                    getattr(getattr(zhu, "qingxu", None), "lunshu", 0))
+                self.jiyi_zt = "已导出：" + os.path.basename(lu)
+                self._hui(dan=True)
+                return
+            if can == "jiyi_dao_ru":
+                self._dao_ru_jiyi()
+                return
+
             if can == "acc_mo":
                 self.zhuangtai["acc_mode"] = 1 - self.zhuangtai.get("acc_mode", 0)
                 if self.zhuangtai["acc_mode"] == 0:
@@ -17397,6 +17784,154 @@ def _ji_bizhi(lu):
         pass
 
 
+# ------------------------------------------------------------------------------
+# 记忆：把人设 + 聊天记录写成一份 markdown
+# ------------------------------------------------------------------------------
+JIYI_MULU = os.path.join(DIR, "记忆")
+
+
+def xie_jiyi_wenjian(tiao=None, haogan=55, dangqian="平静", lunshu=0):
+    """把 人设 + 聊天记录 写成文件，返回路径
+
+    tiao 是对话区的气泡表 [[tag, 文字, 标题], ...]：
+    tag 有 wo / ta / pangbai / xitong / tu 五种 —— 前三种是人话，后两种跳过。
+    """
+    try:
+        os.makedirs(JIYI_MULU, exist_ok=True)
+    except Exception:
+        pass
+    xianzai = datetime.datetime.now()
+    lu = os.path.join(JIYI_MULU, "记忆_%s.md" % xianzai.strftime("%Y%m%d_%H%M"))
+
+    try:
+        with open(os.path.join(DIR, "人设.txt"), encoding="utf-8") as f:
+            ren = f.read().strip()
+    except Exception:
+        ren = "（人设.txt 没读到）"
+
+    hang = []
+    for t in (tiao or []):
+        if not t or len(t) < 2:
+            continue
+        tag, wen = t[0], str(t[1] or "").strip()
+        if not wen:
+            continue
+        if tag == "wo":
+            hang.append("**我**：" + wen.replace("\n", " "))
+        elif tag == "ta":
+            hang.append("**小笨蛋**：" + wen.replace("\n", " "))
+        elif tag == "pangbai":
+            hang.append("（%s）" % wen.replace("\n", " "))
+    liaotian = "\n\n".join(hang) if hang else "（还没聊过）"
+
+    nei = (
+        "# 小笨蛋 · 记忆\n\n"
+        "> 导出时间：%s　｜　好感度 %d/100　心情「%s」　聊到第 %d 轮\n"
+        ">\n"
+        "> 左边是她的人设，右边是你们说过的话。\n"
+        "> 换个模型接着聊时，把这份文件一起喂进去 —— 新模型至少知道她是谁、你们聊过什么。\n\n"
+        "---\n\n"
+        "## 一、她是谁（人设）\n\n%s\n\n"
+        "---\n\n"
+        "## 二、我们说过的\n\n%s\n\n"
+        "---\n\n"
+        "> 她记性不好，换台机器就等于失忆。\n"
+        "> 这份记忆留给你，别弄丢了。\n"
+    ) % (xianzai.strftime("%Y-%m-%d %H:%M"), haogan, dangqian, lunshu, ren, liaotian)
+
+    with open(lu, "w", encoding="utf-8") as f:
+        f.write(nei)
+    return lu
+
+
+def du_jiyi_wenjian(lu):
+    """读一份记忆文件，返回 (对话列表, 好感度)
+
+    对话列表的格式跟对话区的 _tiao 一样：[[tag, 文字, 标题], ...]，
+    所以读回来可以直接塞给对话区重画。
+    好感度读不到就返回 None，调用方自己决定保不保留。
+    """
+    with open(lu, encoding="utf-8") as f:
+        quan = f.read()
+
+    haogan = None
+    m = re.search(r"好感度 (\d+)/100", quan)
+    if m:
+        try:
+            haogan = int(m.group(1))
+        except Exception:
+            haogan = None
+
+    hang = []
+    kuai = quan.split("## 二、我们说过的")
+    if len(kuai) > 1:
+        zheng = kuai[1].split("---")[0]
+        for x in zheng.split("\n"):
+            x = x.strip()
+            if not x:
+                continue
+            if x.startswith("**我**："):
+                hang.append(["wo", x[len("**我**："):].strip(), ""])
+            elif x.startswith("**小笨蛋**："):
+                hang.append(["ta", x[len("**小笨蛋**："):].strip(), ""])
+            elif x.startswith("（") and x.endswith("）"):
+                hang.append(["pangbai", x[1:-1].strip(), ""])
+    return hang, haogan
+
+
+# ------------------------------------------------------------------------------
+# 存档：聊天记录和好感度要一直在 —— 关掉程序、下次打开还在
+# ------------------------------------------------------------------------------
+# 存成一个 json 放在程序目录。清空聊天时连这个文件一起删，这才叫"用户主动删除"。
+# 不做退出时才存：用户可能直接关机、断电、任务管理器杀进程，那就全丢了。
+# 所以是"每 5 秒看一眼，有变化就落盘"，最多丢 5 秒的对话。
+CUNDANG_LU = os.path.join(DIR, "存档.json")
+
+
+def du_cundang():
+    """读存档。没有、读坏了、或者里面没对话，都返回 None"""
+    try:
+        with open(CUNDANG_LU, encoding="utf-8") as f:
+            shu = json.load(f)
+        if isinstance(shu, dict):
+            return shu
+    except Exception:
+        pass
+    return None
+
+
+def xie_cundang(tiao, haogan=55, lunshu=0, dangqian="平静"):
+    """写存档。写失败就算了 —— 存不了档也不能把程序弄崩"""
+    try:
+        dui = []
+        for t in (tiao or []):
+            if not t or len(t) < 3:
+                continue
+            dui.append([str(t[0]), str(t[1]), str(t[2] or "")])
+        shu = {
+            "版本": 1,
+            "时间": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "好感度": int(haogan),
+            "轮数": int(lunshu),
+            "心情": str(dangqian),
+            "对话": dui,
+        }
+        with open(CUNDANG_LU, "w", encoding="utf-8") as f:
+            json.dump(shu, f, ensure_ascii=False, indent=1)
+        return True
+    except Exception:
+        return False
+
+
+def shan_cundang():
+    """用户主动清空聊天时，把存档一起删掉"""
+    try:
+        if os.path.exists(CUNDANG_LU):
+            os.remove(CUNDANG_LU)
+    except Exception:
+        pass
+
+
 def _du_bizhi():
     """上次选的那张；没选过就用壁纸/xiaobendan.mp4（默认壁纸）"""
     try:
@@ -17428,6 +17963,7 @@ def qidong():
     root = tk.Tk()
     _she_zhuti_tubiao(root)
     chuang = DuihuaChuangkou(root)
+
 
     def _pu():
         lu = _du_bizhi()
