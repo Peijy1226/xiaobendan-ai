@@ -42,7 +42,7 @@
 
 | 你想干什么 | 下哪个 |
 | --- | --- |
-| **只想用**，不想装 Python | 到 [Releases](../../releases) 下 `小笨蛋-Setup.exe`，双击安装，桌面会有图标 |
+| **只想用**，不想装 Python | 到 [Releases](../../releases) 下 `xiaobendan-Setup-1.0.exe`，双击安装，桌面会有图标 |
 | **想改代码**，或者想学怎么做的 | 直接 clone 这个仓库，按下面「从源码运行」来 |
 
 安装包和源码是同一份程序。仓库里放源码（体积小、能看能改、能提 issue），安装包放 Releases（因为它是几百 MB 的编译产物，放进 Git 会让仓库变得没法 clone）。
@@ -51,7 +51,7 @@
 
 ## 从安装包安装（普通用户）
 
-到 [Releases](../../releases) 下载 `小笨蛋-Setup-1.0.exe`，双击：
+到 [Releases](../../releases) 下载 `xiaobendan-Setup-1.0.exe`，双击：
 
 1. 选安装位置（默认装在你自己的用户目录 `%LOCALAPPDATA%\Programs\小笨蛋`，**不需要管理员权限**）
 2. 勾「在桌面创建快捷方式」
