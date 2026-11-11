@@ -1,5 +1,12 @@
 # 小笨蛋
 
+<p align="center">
+  <a href="https://github.com/Peijy1226/xiaobendan-ai/releases"><img src="https://img.shields.io/github/v/release/Peijy1226/xiaobendan-ai?color=d6b26a&label=release" alt="Release"></a>
+  <img src="https://img.shields.io/badge/license-MIT-3da639" alt="License">
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078d4" alt="Platform">
+  <img src="https://img.shields.io/badge/python-3-3776ab" alt="Python">
+</p>
+
 > 一个住在你电脑里的十八岁女孩。不是助手，打开电脑就过来陪你。
 
 <p align="center">
