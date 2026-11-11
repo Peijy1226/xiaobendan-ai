@@ -166,6 +166,14 @@ HAOGAN_MA = -1          # 负面表达扣减值
 
 情绪状态共九种：平静、开心、关心、害羞、委屈、恋人、得意、兴奋、困惑，每种对应独立表情池，轮换调度。
 
+### 表情
+
+离线池共 29 张，按情绪调度。以下是其中八张：
+
+<p align="center">
+  <img src="screenshots/03_stickers.png" width="760" alt="表情包">
+</p>
+
 ## 记忆
 
 「☰ 功能 → 记忆」页面提供两个操作。
@@ -229,7 +237,7 @@ HAOGAN_MA = -1          # 负面表达扣减值
 | `requirements.txt` | 依赖清单，仅 Pillow |
 | `打包.spec` | PyInstaller 打包配置 |
 | `安装包.iss` | Inno Setup 安装脚本 |
-| `README_小笨蛋.md` | 开发日志，记录各版本变更与设计决策 |
+| `docs/开发日志.md` | 开发日志，记录各版本变更与设计决策 |
 | `LICENSE` | MIT 许可证 |
 
 程序运行后生成以下文件（均已列入 `.gitignore`）：
