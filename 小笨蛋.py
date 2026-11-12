@@ -9824,6 +9824,7 @@ GONGNENG_LIE = (
     # ⑤【第二轮】原「背景」改叫「壁纸」（内部 key 仍是 beijing，所有调用不用动）
     ("壁纸",     "beijing"),
     ("字体大小", "ziti"),
+    ("灵光",     "lingguang"),
     ("记忆",     "jiyi"),
     # ⑦ 忘记我吧：名字取四个字，和「字体大小」同宽 —— 按钮是 118 固定宽，
     #    五个字（如「清空聊天记录」）量出来 78px，加上图标 18 + 间隙 10 +
@@ -13147,9 +13148,10 @@ class DuihuaChuangkou:
             if g is not None:
                 try:
                     g.dangqian = "zhengli"
-                    g.xt_kai = True
                     g.qing_que = False
                     g._hui(dan=True)
+                    # 跟页面上那个「写文本」按钮走同一条路：调系统记事本
+                    g._xt_jishiben()
                 except Exception:
                     pass
             return
@@ -15016,8 +15018,9 @@ GN_NEI_RONG = (
     ("dashang", "打赏"),
     ("beijing", "壁纸"),
     ("ziti",   "字体大小"),
-    ("qingkong", "忘记我吧"),
+    ("lingguang", "灵光"),
     ("jiyi",  "记忆"),
+    ("qingkong", "忘记我吧"),
     ("bangzhu", "帮助"),
     ("guanyu", "关于"),
 )
@@ -15292,6 +15295,15 @@ class GongNengYe:
             "acc_mode": 0,          # 0=跟随壁纸 1=固定暖金
         }
         self.jiyi_zt = ""          # 记忆页：上次导入/导出的结果，显示在页面上
+        # 灵光页：表单里的四个值 + 输入框 + 状态提示
+        self.lg_kai = False        # 第一次进页面才从配置文件读一次
+        self.lg_dz = ""
+        self.lg_key = ""
+        self.lg_mo = ""
+        self.lg_cs = ""
+        self.lg_zt = ""
+        self._lg_y = []            # 四个输入框的位置
+        self._lg_shuru = []        # 四个真 Entry
         self._renshe_kuang = None
         self._xz_ti_kuang = None
         # 贴在画布上的真输入框（Entry / Text）登记表：元素是
@@ -15471,6 +15483,12 @@ class GongNengYe:
             self._jiao_id = self.root.bind("<FocusIn>", self._gen_tai, add="+")
         except Exception:
             self._jiao_id = None
+        # 鼠标移回面板就抢回焦点：从资源管理器 / 回收站切回来时，
+        # 第一次点击只会被用来激活窗口，按钮不响应（用户反馈的"点生成没反应"）
+        try:
+            self.win.bind("<Enter>", self._na_hui_jiao, add="+")
+        except Exception:
+            pass
 
     def _gen_tai(self, e=None):
         """主窗被激活时把面板抬回它上面（不设常驻 topmost）"""
@@ -15534,6 +15552,65 @@ class GongNengYe:
         """
         try:
             self.win.attributes("-topmost", False)
+        except Exception:
+            pass
+
+    def _qiang_qian(self):
+        """把功能页强行拉到前台
+
+        面板是 overrideredirect 的无边框窗口，Windows 不会因为点击就把它
+        当成前台窗口。打开过演示夹（资源管理器）之后，键盘焦点一直在对方
+        那边，面板里的输入框一个字都收不到 —— 用户原话"关掉演示夹才能打字"。
+
+        做法：借前台线程的输入队列用一下（AttachThreadInput），本线程就有
+        资格设前台了，设完立刻断开，不留副作用。
+        """
+        try:
+            import ctypes
+            u = ctypes.windll.user32
+            k = ctypes.windll.kernel32
+            try:
+                hwnd = int(self.win.wm_frame(), 16)
+            except Exception:
+                hwnd = int(self.win.winfo_id())
+            if not hwnd:
+                return
+            fg = u.GetForegroundWindow()
+            _pid = ctypes.c_ulong(0)
+            tid_fg = u.GetWindowThreadProcessId(fg, ctypes.byref(_pid))
+            tid_me = k.GetCurrentThreadId()
+            jie = bool(tid_fg) and tid_fg != tid_me
+            if jie:
+                u.AttachThreadInput(tid_me, tid_fg, True)
+            try:
+                u.BringWindowToTop(hwnd)
+                u.SetForegroundWindow(hwnd)
+                u.SetActiveWindow(hwnd)
+            finally:
+                if jie:
+                    u.AttachThreadInput(tid_me, tid_fg, False)
+        except Exception:
+            pass
+
+    def _na_hui_jiao(self, e=None):
+        """鼠标移回功能页时，主动抬到最前
+
+        为什么要这个：打开「演示夹」「回收站」之后，前台变成了资源管理器，
+        功能页就成了非激活窗口。overrideredirect 的窗口在非激活状态下，
+        第一次点击只会被 Windows 用来"激活窗口"，不会传给按钮 ——
+        用户的感受就是"点了生成没反应，得关掉重开才行"。
+        鼠标一移回来就把面板抬起来，那次点击就能正常命中。
+
+        注意只管"抬"，不管"焦点"：键盘焦点由 _yao_jujiao 在点击时交给
+        具体控件。这里如果 focus_force，焦点会卡在面板窗口上、字打不进去。
+        """
+        try:
+            self.win.lift()
+            # 只"激活窗口"，不"把焦点钉在窗口上"：
+            # 不激活的话，第一次点击会被 Windows 用来激活窗口，按钮收不到；
+            # 但激活之后必须让 _yao_jujiao 把焦点交给具体控件，否则打不进字。
+            if self.win.focus_get() is None:
+                self.win.focus_force()
         except Exception:
             pass
 
@@ -15921,6 +15998,10 @@ class GongNengYe:
         self._renshe_ding()
         self._xz_ti_ding()
         try:
+            self._lg_ding()
+        except Exception:
+            pass
+        try:
             self._xt_ding()
         except Exception:
             pass
@@ -16291,8 +16372,12 @@ class GongNengYe:
         # 用 chip 样式而不是按钮：它是"标题这一行的小开关"，
         # 画成按钮会跟「扫描 / 移到回收站」抢重点，看着像第四个主操作。
         cx = you - int(d.textlength("收起写作", font=f_xiao)) - 26
-        self._chip(tu, d, cx, y - 4, "收起写作" if self.xt_kai else "写文本",
-                   self.xt_kai, ("act", "xt_kai"), f=f_xiao)
+        _w = self._chip(tu, d, cx, y - 4, "收起写作" if self.xt_kai else "写文本",
+                        self.xt_kai, ("act", "xt_kai"), f=f_xiao)
+        # 这个胶囊只有 28px 高，又紧挨着右边的"打开回收站"，
+        # 差几个像素就点不到 —— 单独把热区往外放宽一圈。
+        # 后登记的坐标在列表末尾，点在外圈时前面那条匹配不上，只有这条命中。
+        self.hits.append((cx - 8, y - 12, cx + _w + 8, y + 34, ("act", "xt_kai")))
 
         # 抽屉开着 → 下方整块换成写文本；关着 → 原来那套一个字都不变
         if self.xt_kai:
@@ -16405,6 +16490,13 @@ class GongNengYe:
                 self._xt_ti_kuang = None
         if self._xt_ti_kuang is not None:
             x, y, w, h = getattr(self, "_xt_ti_y", (300, 180, 400, 19))
+            # 位置每次都要跟着重摆：点了文件夹、清单变长，抽屉会往下挪，
+            # 只 lift 不 place 的话真输入框还留在旧位置 ——
+            # 看着框在那儿，点上去没反应，就是这个原因（用户反馈的 bug）
+            try:
+                self._xt_ti_kuang.place(x=x, y=y, width=w, height=h)
+            except Exception:
+                pass
             self._deng_ji_shuru(self._xt_ti_kuang, x, y, w, h)
 
         # 正文
@@ -16428,7 +16520,50 @@ class GongNengYe:
                 self._xt_wen_kuang = None
         if self._xt_wen_kuang is not None:
             x, y, w, h = getattr(self, "_xt_wen_y", (270, 240, 700, 300))
+            try:
+                self._xt_wen_kuang.place(x=x, y=y, width=w, height=h)
+            except Exception:
+                pass
             self._deng_ji_shuru(self._xt_wen_kuang, x, y, w, h)
+
+    def _xt_jishiben(self):
+        """「写文本」：用系统记事本写，保存后文件直接落在演示夹里
+
+        为什么不在程序里做输入框：功能页是无边框窗口，Windows 不给它前台
+        资格。打开过演示夹（资源管理器）之后，键盘消息一律发给对方，程序里
+        的输入框一个字都收不到 —— 用户原话"关掉演示夹才能打字"，这个在
+        系统层面绕不过去。记事本是独立程序，不存在这个问题。
+        """
+        mu = zl_yanshi_lu()
+        try:
+            os.makedirs(mu, exist_ok=True)
+        except Exception:
+            pass
+
+        ji = datetime.datetime.now().strftime("%m%d_%H%M")
+        lu = os.path.join(mu, "新文本_%s.txt" % ji)
+        n = 2
+        while os.path.exists(lu):
+            lu = os.path.join(mu, "新文本_%s_%d.txt" % (ji, n))
+            n += 1
+
+        try:
+            with open(lu, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception as e:
+            self.zl_zt = "演示夹里写不了新文件：%r" % (e,)
+            self._hui(dan=False)
+            return
+
+        try:
+            os.startfile(lu)
+        except Exception:
+            self.zl_zt = "打不开编辑器，手动去这里建吧：%s" % lu
+            self._hui(dan=False)
+            return
+
+        self.zl_zt = "已打开「%s」，写完按 Ctrl+S，回来点扫描" % os.path.basename(lu)
+        self._hui(dan=False)
 
     def _xt_qu(self):
         """把两个控件里的内容收回状态（不重绘，免得住不了手）"""
@@ -16634,6 +16769,116 @@ class GongNengYe:
         self.hits.append(b + (("act", "qk_que"),))
         d.text((x + 180, y + 11), "点两次才会真的清" if self.qing_que else "",
                font=f_f, fill=(190, 130, 110))
+
+    def _ye_lingguang(self, tu, d, f_z, f_f, f_xiao, f_ti):
+        """灵光页：不用打开 txt，界面里填完就能聊"""
+        x = self.nav_kuan + 26
+        y = self.tou + 12
+
+        # 第一次进页面，从配置文件取一次值
+        if not self.lg_kai:
+            self.lg_kai = True
+            pei = du_api_peizhi()
+            self.lg_dz = pei.get("base_url", "https://api.deepseek.com")
+            self.lg_key = pei.get("api_key", "")
+            self.lg_mo = pei.get("model", "deepseek-flash")
+            self.lg_cs = pei.get("默认城市", "北京")
+
+        d.text((x, y), "填完点保存，顶栏那个开关点一下就生效，不用重启",
+               font=f_f, fill=(188, 182, 168))
+        y += 34
+
+        kuan = max(240, min(420, self.nei_kuan - 40))
+        self._lg_y = []
+        for biao, zhi in (("接口地址", self.lg_dz),
+                          ("API Key", self.lg_key),
+                          ("模型名称", self.lg_mo),
+                          ("默认城市", self.lg_cs)):
+            d.text((x, y), biao, font=f_f, fill=(206, 200, 186))
+            if biao == "API Key":
+                d.text((x + kuan + 12, y), "（不会显示，粘贴即可）",
+                       font=f_xiao, fill=(150, 145, 133))
+            y += 23
+            t = _gn_yuan(kuan, 32, 8, (18, 16, 13, 220), (255, 250, 235, 76))
+            tu.paste(t, (x, y), t)
+            self._lg_y.append((x + 11, y + 7, kuan - 22, 18))
+            y += 44
+
+        y += 4
+        b1 = self._niu(tu, d, x, y, 120, 34, "测试连接")
+        self.hits.append(b1 + (("act", "lg_ce"),))
+        b2 = self._niu(tu, d, x + 132, y, 100, 34, "保存", True)
+        self.hits.append(b2 + (("act", "lg_cun"),))
+        y += 46
+
+        if self.lg_zt:
+            se = (150, 214, 150) if self.lg_zt.startswith("✓") else \
+                 ((236, 150, 140) if self.lg_zt.startswith("✗") else (198, 192, 178))
+            # 太长就折成两行，别画出框
+            wen = self.lg_zt
+            if len(wen) > 30:
+                d.text((x, y), wen[:30], font=f_xiao, fill=se)
+                d.text((x, y + 20), wen[30:], font=f_xiao, fill=se)
+            else:
+                d.text((x, y), wen, font=f_xiao, fill=se)
+        else:
+            d.text((x, y), "不填也能用，只是走离线模式，说话没那么活",
+                   font=f_xiao, fill=(158, 152, 140))
+
+    def _lg_ding(self):
+        """灵光页的四个真输入框：Canvas 画框，tk.Entry 贴上去
+
+        做法跟写作页的「题目」、关于页的「人设」一致：切走这页就销毁，
+        免得 Entry 浮在别的页面上。
+        """
+        if self.dangqian != "lingguang" or not self._lg_y:
+            for e in (self._lg_shuru or []):
+                try:
+                    e.destroy()
+                except Exception:
+                    pass
+            self._lg_shuru = []
+            return
+
+        if self._lg_shuru:
+            for e, (x, y, w, h) in zip(self._lg_shuru, self._lg_y):
+                try:
+                    e.place(x=x, y=y, width=w, height=h)
+                    self._deng_ji_shuru(e, x, y, w, h)
+                except Exception:
+                    pass
+            return
+
+        zhi = (self.lg_dz, self.lg_key, self.lg_mo, self.lg_cs)
+        ming = ("lg_dz", "lg_key", "lg_mo", "lg_cs")
+        for i, (x, y, w, h) in enumerate(self._lg_y):
+            mi = (i == 1)
+            e = tk.Entry(self.cv, bd=0, highlightthickness=0,
+                         bg="#14120f", fg="#f4eee0",
+                         insertbackground="#f4eee0",
+                         font=(self.zhu.ziti, 11), relief="flat",
+                         show="●" if mi else "")
+            e.insert(0, zhi[i] or "")
+            e.place(x=x, y=y, width=w, height=h)
+            e.bind("<KeyRelease>",
+                   lambda ev, n=ming[i], w0=e: self._lg_qu(n, w0))
+            e.bind("<Button-1>", lambda ev, w0=e: self._yao_jujiao(w0), add="+")
+            self._lg_shuru.append(e)
+            self._deng_ji_shuru(e, x, y, w, h)
+
+    def _lg_qu(self, ming, e):
+        """输入框一改就同步到内存，切页再回来不会丢"""
+        try:
+            setattr(self, ming, e.get().strip() if ming != "lg_key" else e.get())
+        except Exception:
+            pass
+
+    def _lg_hui(self, ok, msg):
+        self.lg_zt = ("✓ " if ok else "✗ ") + msg
+        try:
+            self._hui(dan=False)
+        except Exception:
+            pass
 
     def _ye_jiyi(self, tu, d, f_z, f_f, f_xiao, f_ti):
         """记忆页：把人设和聊天导成一份文件，换个模型也能接着聊"""
@@ -17021,15 +17266,33 @@ class GongNengYe:
             try:
                 import ctypes
                 u = ctypes.windll.user32
+                k = ctypes.windll.kernel32
                 hwnd = int(w.winfo_id())
                 top = u.GetAncestor(hwnd, 2)   # GA_ROOT：面板自己的顶层窗口
-                if top and u.GetForegroundWindow() != top:
-                    u.BringWindowToTop(top)
-                    u.SetForegroundWindow(top)
-                # 【第四十七轮】同理：系统焦点已经在本窗口里就别再搬一次。
-                cur = u.GetFocus()
-                if not cur or u.GetAncestor(cur, 2) != top:
-                    u.SetFocus(hwnd)           # 系统层：点名这个控件
+
+                # 面板是无边框的独立窗口，点它不会被系统当成"激活"，
+                # 于是 SetFocus 一直被拒 —— 表现就是框能选中、字打不进去。
+                # 办法是借前台线程的输入队列用一下：AttachThreadInput 之后
+                # 本线程就有资格设焦点了，用完立刻断开。
+                fg = u.GetForegroundWindow()
+                # 必须用 byref 传进程号指针：这个 API 的第二个参数是出参，
+                # 直接传 None 时 ctypes 可能把返回值解析错，拿到的 tid 就不对，
+                # 后面 AttachThreadInput 也就接错线程 —— 抢前台等于没抢。
+                _pid = ctypes.c_ulong(0)
+                tid_fg = u.GetWindowThreadProcessId(fg, ctypes.byref(_pid))
+                tid_me = k.GetCurrentThreadId()
+                jie = bool(tid_fg) and tid_fg != tid_me
+                if jie:
+                    u.AttachThreadInput(tid_me, tid_fg, True)
+                try:
+                    if top:
+                        u.BringWindowToTop(top)
+                        u.SetForegroundWindow(top)
+                    if u.GetFocus() != hwnd:
+                        u.SetFocus(hwnd)       # 系统层：点名这个控件
+                finally:
+                    if jie:
+                        u.AttachThreadInput(tid_me, tid_fg, False)
             except Exception:
                 pass
 
@@ -17154,6 +17417,44 @@ class GongNengYe:
                 self._dao_ru_jiyi()
                 return
 
+            if can == "lg_cun":
+                # 保存灵光配置：写回 API.txt，顺便试一下现在能不能联网
+                ok = xie_api_peizhi({
+                    "api_key": (self.lg_key or "").strip(),
+                    "base_url": (self.lg_dz or "").strip(),
+                    "model": (self.lg_mo or "").strip(),
+                    "默认城市": (self.lg_cs or "").strip(),
+                })
+                if ok:
+                    self.lg_zt = "✓ 已保存，点顶栏的开关就生效"
+                    try:
+                        self.zhu._lw_kai = api_youxiao()
+                    except Exception:
+                        pass
+                else:
+                    self.lg_zt = "✗ 保存失败，检查程序目录有没有写入权限"
+                self._hui(dan=True)
+                return
+
+            if can == "lg_ce":
+                # 测试连接要发网络请求，必须丢到子线程，否则界面会僵住
+                self.lg_zt = "正在连接……"
+                self._hui(dan=False)
+                dz, key, mo = self.lg_dz, self.lg_key, self.lg_mo
+
+                def _work():
+                    try:
+                        ok2, msg = ce_lingguang(key, dz, mo)
+                    except Exception as e:
+                        ok2, msg = False, repr(e)
+                    try:
+                        self.root.after(0, lambda: self._lg_hui(ok2, msg))
+                    except Exception:
+                        pass
+
+                threading.Thread(target=_work, daemon=True).start()
+                return
+
             if can == "acc_mo":
                 self.zhuangtai["acc_mode"] = 1 - self.zhuangtai.get("acc_mode", 0)
                 if self.zhuangtai["acc_mode"] == 0:
@@ -17187,10 +17488,8 @@ class GongNengYe:
                 self._xz_kai()
                 return
             if can == "xt_kai":
-                # 开合只换下方那块区域，整理助手的清单/确认状态一律不动
-                self.xt_kai = not self.xt_kai
-                self.xt_zt = ""
-                self._hui(dan=False)
+                # 改成调系统记事本写了（原因见 _xt_jishiben 的说明）
+                self._xt_jishiben()
                 return
             if can == "xt_sheng":
                 self._xt_sheng()
@@ -18059,6 +18358,86 @@ def du_api_peizhi():
     except Exception:
         pass
     return pei
+
+
+def xie_api_peizhi(bian=None):
+    """把配置写回 API.txt。bian 是 {键: 值}，只覆盖传进来的那几项。
+
+    为什么整份重写而不是改某一行：原文件可能被用户手动加过注释、顺序也乱，
+    逐行替换容易改错行。这里按标准格式重写一遍，值从现有配置取，只替换
+    bian 里的键 —— 用户自己加的注释会丢，但配置不会错。
+    """
+    pei = du_api_peizhi()
+    if bian:
+        pei.update(bian)
+    hang = [
+        "# 灵光配置。填完保存，点顶栏的开关就生效，不用重启程序。",
+        "# 这个文件里是你的钥匙，不要发给别人、不要提交到仓库。",
+        "",
+        "钥匙=%s" % pei.get("api_key", ""),
+        "模型=%s" % pei.get("model", "deepseek-flash"),
+        "地址=%s" % pei.get("base_url", "https://api.deepseek.com"),
+        "超时=%s" % pei.get("timeout", "25"),
+        "思考=%s" % pei.get("thinking", "0"),
+        "默认城市=%s" % pei.get("默认城市", "北京"),
+        "默认开启=%s" % pei.get("默认开启", "1"),
+    ]
+    try:
+        with open(API_PEIZHI_LU, "w", encoding="utf-8") as f:
+            f.write("\n".join(hang) + "\n")
+        return True
+    except Exception:
+        return False
+
+
+def ce_lingguang(api_key, base_url, model, miao=15):
+    """用传进来的值试发一次请求，返回 (成功?, 一句话结果)
+
+    不读磁盘上的配置：用户刚在表单里改完还没保存，测试就该测表单里的值。
+    """
+    key = str(api_key or "").strip()
+    if not key:
+        return False, "还没填 API Key"
+
+    url = str(base_url or "").strip().rstrip("/")
+    if not url:
+        return False, "还没填接口地址"
+    if not url.endswith("/chat/completions"):
+        url += "/chat/completions"
+
+    ti = json.dumps({
+        "model": str(model or "deepseek-chat").strip(),
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 8,
+    }).encode("utf-8")
+
+    try:
+        req = urllib.request.Request(
+            url, data=ti,
+            headers={"Content-Type": "application/json",
+                     "Authorization": "Bearer " + key},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=miao) as r:
+            d = json.loads(r.read().decode("utf-8", "ignore"))
+        hui = ""
+        try:
+            hui = d["choices"][0]["message"]["content"] or ""
+        except Exception:
+            pass
+        hui = hui.strip().replace("\n", " ")[:24]
+        return True, "连接正常" + ("，它回了：" + hui if hui else "")
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return False, "密钥无效（401）"
+        if e.code == 402:
+            return False, "余额不足（402）"
+        if e.code == 404:
+            return False, "地址或模型名不对（404）"
+        if e.code == 429:
+            return False, "请求太频繁（429），等会儿再试"
+        return False, "接口返回 %d" % e.code
+    except Exception as e:
+        return False, "连不上：%s" % (str(e)[:36],)
 
 
 def api_youxiao(pei=None):
